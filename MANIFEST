@@ -1,8 +1,5 @@
-Changes
 Enigma.pm
 Makefile.PL
 MANIFEST
 README
-bombe.pl
-encode.pl
 test.pl

@@ -1,18 +1,11 @@
-Crypt/Enigma version 1.1
-=========================
+Crypt/Enigma version 0.1
+========================
 
-This modules allows you to recreate the workings of a mechanical
-cryptography device from WW II with only 50 years of computer 
-science research behind you!  
-
+Perl implementation of the WWII Enigma Machine
 
 Please see the example scripts for more information and 
 usage instructions.
 
-
-You can also check out http://www.frogboy.net/Enigma for
-more information (and a term paper i wrote on Enigma).
- 
 INSTALLATION
  
 To install this module type the following:
@@ -32,4 +25,4 @@ COPYRIGHT AND LICENCE
  
 Put the correct copyright and licence information here.
  
-Copyright (C) 2001 Jason Blakey <jblakey@frogboy.net>
+Copyright (C) 2002 Alistair Mills <cpan@alizta.com>
