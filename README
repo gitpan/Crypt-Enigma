@@ -1,4 +1,4 @@
-Crypt/Enigma version 0.1
+Crypt/Enigma version 1.0
 ========================
 
 Perl implementation of the WWII Enigma Machine
@@ -23,6 +23,7 @@ This module requires these other modules and libraries:
  
 COPYRIGHT AND LICENCE
  
-Put the correct copyright and licence information here.
- 
-Copyright (C) 2002 Alistair Mills <cpan@alizta.com>
+Copyright (C) 2001-2002 Alistair Francis <cpan@alizta.com>
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself.

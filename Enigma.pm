@@ -1,124 +1,290 @@
 package Crypt::Enigma;
 
-$VERSION = "0.01";
+$VERSION = '1.0';
 
 use strict;
 
 sub new {
 	my $class = shift;
-	my @rotors = reverse( split(' ', shift) );
-	my @startLetter = reverse( split('', shift) );
-	my @ringSetting = reverse( split(' ', shift) );
-	my $reflector = shift;
+	my $args = ref($_[0]) ? shift : {@_};
 
-	# Save the settings
+	# Setup the object
 	my $self = {
-		rotorObjects => undef,
-		reflectorObject => undef,
-		settings => {
-				rotors    => \@rotors,
-				letters   => \@startLetter,
-				rings     => \@ringSetting,
-				reflector => $reflector,
-			},
+		_rotorObjects		=> undef,
+		_reflectorObject	=> undef,
+		_stecker			=> undef,
+		_settings			=>[]
 	};
 	bless $self, $class;
 
+	$self->_init( $args );
+
+	return( $self );
+};
+
+sub _init {
+	my $self = shift;
+	my $args = shift;
+
+	foreach( keys %{$args} ) {
+		if( ($_ =~ /^(rotors|startletters|ringsettings|stecker)$/) && (ref($args->{$_}) ne 'ARRAY') ) {
+			print STDERR "Argument '$_' should be an array reference (using defaults)\n";
+			delete( ${$args}{$_} );
+		};
+	};
+
+	my $rotors			= $args->{rotors} || [ 'RotorI', 'RotorII', 'RotorIII' ];
+	my $startletters	= $args->{startletters} || [ 'Z', 'A', 'A' ];
+	my $rings			= $args->{ringsettings} || [ 0, 0, 0 ];
+	my $reflector		= $args->{reflector} || 'ReflectorB';
+	my $stecker			= $args->{stecker} || [];
+
 	my $count = 0;
-  foreach ( @rotors ) {
-		# init called with (rotorName, startLetter, ringSetting)
-		my $rotorObj = $self->_initRotor( $rotors[$count], $startLetter[$count], $ringSetting[$count] );
-    push @{$self->{rotorObjects}}, $rotorObj;
-		# save the rotor settings
+	foreach ( @{$rotors} ) {
+		push @{$self->{_settings}}, [ $_, $startletters->[$count], $rings->[$count] ];
+
 		$count++;
 	};
 
-	# CREATE REFLECTOR
-	my $className = 'Crypt::Enigma::Reflectors::'.$reflector;
-	$self->{reflectorObject} = $className->new;
+	# Create Reflector
+	my $reflectorObj = Crypt::Enigma::Reflectors->new( $reflector );
+	$self->_storeReflectorObject( $reflectorObj );
+
+	# Setup Steckerboard
+	$self->setSteckerBoard( $stecker );
 
 	return( $self );
 };
 
 
-sub _initRotor {
+sub getRotorNames {
+	my $self = shift;
+	my @names;
+
+	foreach( $self->_getRotorObjects ) {
+		push @names, $_->getName;
+	};	
+
+	return( @names );
+};
+
+sub getStartLetters {
+	my $self = shift;
+	my @letters;
+
+	foreach( $self->_getRotorObjects ) {
+		push @letters, $_->getStartLetter;
+	};	
+	return( @letters );
+};
+
+sub getRingSettings {
+	my $self = shift;                   
+	my @rings;
+	foreach( $self->_getRotorObjects ) {
+		push @rings, $_->getRingSetting;
+	};	
+	return( @rings );
+};
+
+sub getReflector {
+	my $self = shift;
+	return( $self->{_reflectorObject}->getName );
+};
+
+sub setSteckerBoard {
+	my $self = shift;
+	my $stecker = shift;
+
+	for(my $count = 0; $count < @{$stecker}; $count = $count+2 ) {
+		$self->{_stecker}->{$stecker->[$count]} = $stecker->[$count+1];
+		$self->{_stecker}->{$stecker->[$count+1]} = $stecker->[$count];
+	};
+
+	return;
+};
+
+sub dumpSettings {
+	my $self = shift;
+
+	print STDERR "Rotors:\t\t". join( ' ', $self->getRotorNames ) ."\n";
+	print STDERR "Start:\t\t". join( ' ', $self->getStartLetters ) ."\n";
+	print STDERR "Rings:\t\t". join( ' ', $self->getRingSettings ) ."\n";
+	print STDERR "Reflector:\t". $self->getReflector ."\n";
+
+	return;
+};
+
+sub setRotor {
 	my $self = shift;
 	my $rotorName = shift;
-	my $startLetter = shift;
+	my $startLetter = uc( shift );
 	my $ringSetting = shift;
+	my $rotorNumber = shift;
 
 	# Do some checking
 	unless( $rotorName =~ /^Rotor(I|II|III|IV|V|VI|VII|VIII|Beta|Gamma)$/ ) {
-		print "Invalid rotor name: $rotorName\n";
-		exit( 1 );
+		print STDERR "Invalid rotor name (using default 'RotorI')\n";
+		$rotorName = 'RotorI';
 	};
-	unless( $startLetter =~ /^[A-Za-z]$/ ) {
-		print "Invalid initial setting: $startLetter\n";
-		exit( 1 );
+
+	unless( defined($startLetter) && $startLetter =~ /^[A-Z]$/ ) {
+		print STDERR "Invalid start letter (using default 'A' for $rotorName)\n";
+		$startLetter = 'A';
 	};
-	unless( ($ringSetting =~ /[0-9]$/) && ($ringSetting >= 0) && ($ringSetting <= 25) ) {
-		print "Invalid ring setting: $ringSetting\n";
-		exit( 1 );
+
+	unless( defined($ringSetting) && ($ringSetting =~ /[0-9]$/) && ($ringSetting >= 0) && ($ringSetting <= 25) ) {
+		print STDERR "Invalid ring setting (using default '0' for $rotorName)\n";
+		$ringSetting = 0;
 	}
 
-	my $className = 'Crypt::Enigma::Rotors::'.$rotorName;
-	my $rotor = $className->new( $startLetter, $ringSetting );
+	unless( defined($rotorNumber) && ($rotorNumber > 0) && ($rotorNumber < 6) ) {
+		print STDERR "Invalid rotor number (failed to add rotor $rotorName)\n";
+		return( 0 );
+	};
 
-	return( $rotor );
+	my $className = 'Crypt::Enigma::Rotors::'.$rotorName;
+	my $rotorObj = $className->new( $startLetter, $ringSetting );
+	$self->_storeRotorObject( $rotorObj, $rotorNumber-1 );
+
+	return( 1 );
 };
 
 
 sub cipher {
 	my $self = shift;
-	my $plainText = lc(shift);
+	my $plainText = uc(shift);
 	my $cipherText = '';
+
+	my $count = 1;
+	foreach( @{$self->{_settings}} ) {
+		# setRotor(rotorName, startLetter, ringSetting, rotorNumber)
+		$self->setRotor( $_->[0], , $_->[1], $_->[2], $count);
+		$count++;
+	};
 
 	foreach my $letter ( split('', $plainText) ) {
 		# next if the text is not alpha
-		if( $letter !~ /[A-Za-z]/ ) {
+		if( $letter !~ /[A-Z]/ ) {
 			next;
 		};
 
+		# Stecker
+		$letter = $self->_performSteckerSwap( $letter );
+
 		# fwd cycle
 		my $count = 0;
-		foreach( @{$self->{rotorObjects}} ) {
+		foreach( $self->_getRotorObjects ) {
 			# We always rotate the first scrambler
 			if( $count == 0 ) {
 				$_->_rotateDisk;
 			};
 			$letter = $_->fwdCipher( $letter );
-			# rotate the next disk, if there is one
+			# rotate the next disk, if the flag is set
 			if( $_->_getFlag('rotateNext') && ($count != 2) ) {
-				$self->_cycleNextRotor( $self->{rotorObjects}->[$count+1] );
+				$self->_cycleNextRotor( $self->_getRotorObject($count+1) );
 				$_->_setFlag( rotateNext => 0 );
 			};
 			$count++;
 		};
 
 		# reflector
-		$letter = $self->reflect( $letter );
+		$letter = $self->_reflect( $letter );
 
 		# rev cycle
-		foreach( reverse(@{$self->{rotorObjects}}) ) {
+		foreach( reverse($self->_getRotorObjects) ) {
 			$letter = $_->revCipher( $letter );
 		};
 
+		# Stecker
+		$letter = $self->_performSteckerSwap( $letter );
+
 		$cipherText .= $letter;
 	};
-	# return uppercase ciphertext, like the original :)
+
+	# return uppercase ciphertext, like the original Enigma would do :)
 	return( uc($cipherText) );
 };
 
+
+sub _getRotorName {
+	my $self = shift;
+	my $rotor = shift;
+	return( $self->{settings}->{_rotorObjects}->[$rotor]->getName );
+};
+
+sub _getStartLetter {
+	my $self = shift;
+	my $letter = shift;
+	return( $self->{settings}->{startletters}->[$letter] );
+};
+
+sub _getRingSetting {
+	my $self = shift;
+	my $ring = shift;
+	return( $self->{settings}->{rings}->[$ring] );
+};
+
+sub _storeRotorObject {
+	my $self = shift;
+	my $rotorObj = shift;
+	my $rotorNumber = shift;
+
+	if( defined($rotorNumber) ) {
+		$self->{_rotorObjects}->[$rotorNumber] = $rotorObj;
+	}
+	else {
+		push @{$self->{_rotorObjects}}, $rotorObj;
+	};
+
+	return( 1 );
+};
+
+sub _getRotorObject {
+	my $self = shift;
+	my $rotor = shift;
+	return( $self->{_rotorObjects}->[$rotor] );
+};
+
+sub _getRotorObjects {
+	my $self = shift;
+	return( @{$self->{_rotorObjects}} );
+};
+
+sub _storeReflectorObject {
+    my $self = shift;
+    my $reflectorObj = shift;
+    $self->{_reflectorObject} = $reflectorObj;
+    return( 1 );
+};
+
+sub _getReflectorObject {
+    my $self = shift;
+    return( $self->{_reflectorObject} );
+};
+
+
 # alter the input using the reflector
-sub reflect {
+sub _reflect {
 	my $self = shift;
 	my $inputLetter = shift;
 
-	my $outputLetter = $self->{reflectorObject}->reflect( $inputLetter );
+	my $outputLetter = $self->_getReflectorObject->_reflect( $inputLetter );
 
 	return( $outputLetter );
 };
 
+# alter the letter using the Steckerboard
+sub _performSteckerSwap {
+	my $self = shift;
+	my $inputLetter = shift;
+
+	if( defined($self->{_stecker}->{$inputLetter}) ) {
+		return( $self->{_stecker}->{$inputLetter} );
+	};
+
+	return( $inputLetter );
+};
 
 # Rotate the next rotor
 sub _cycleNextRotor {
@@ -130,26 +296,40 @@ sub _cycleNextRotor {
 };
 
 
-sub getMachineSettings {
-	my $self = shift;
-
-	return( $self->{settings} );
-};
-
 
 package Crypt::Enigma::Reflectors;
 
 use strict;
 
-sub reflect {
+sub new {
+	my $class = shift;
+	my $reflector = shift;
+
+	unless( $reflector =~ /^Reflector(B|Bdunn|C|Cdunn)$/ ) {
+		print STDERR "Invalid reflector name (using default 'ReflectorB')\n";
+		$reflector = 'ReflectorB';
+	};
+
+	my $reflectorClass = 'Crypt::Enigma::Reflectors::' . $reflector;
+	my $reflectorObj = $reflectorClass->new;
+
+	return( $reflectorObj );
+};
+
+sub _reflect {
 	my $self = shift;
 	my $inputLetter = shift;
 
-  my $intInputLetter = ord($inputLetter) - 97;
+  my $intInputLetter = ord($inputLetter) - 65;
 
-  my $outputLetter = ${$self->{alphabet}}[$intInputLetter];
+  my $outputLetter = ${$self->{_alphabet}}[$intInputLetter];
 
   return( $outputLetter );
+};
+
+sub getName {
+	my $self = shift;
+	return( $self->{_label} );
 };
 
 
@@ -161,8 +341,9 @@ sub new {
 	my $class = shift;
 
 	my $self = {
-		'alphabet' => [ 
-			'y', 'r', 'u', 'h', 'q', 's', 'l', 'd', 'p', 'x', 'n', 'g', 'o', 'k', 'm', 'i', 'e', 'b', 'f', 'z', 'c', 'w', 'v', 'j', 'a', 't'
+		'_label'	=> 'ReflectorB',
+		'_alphabet'		=> [ 
+			'Y', 'R', 'U', 'H', 'Q', 'S', 'L', 'D', 'P', 'X', 'N', 'G', 'O', 'K', 'M', 'I', 'E', 'B', 'F', 'Z', 'C', 'W', 'V', 'J', 'A', 'T'
 		],
 	};
 	bless $self, $class;
@@ -180,8 +361,9 @@ sub new {
 	my $class = shift;
 
 	my $self = {
-		'alphabet' => [ 
-			'e', 'n', 'k', 'q', 'a', 'u', 'y', 'w', 'j', 'i', 'c', 'o', 'p', 'b', 'l', 'm', 'd', 'x', 'z', 'v', 'f', 't', 'h', 'r', 'g', 's'
+		'_label'	=> 'ReflectorBdunn',
+		'_alphabet'		=> [ 
+			'E', 'N', 'K', 'Q', 'A', 'U', 'Y', 'W', 'J', 'I', 'C', 'O', 'P', 'B', 'L', 'M', 'D', 'X', 'Z', 'V', 'F', 'T', 'H', 'R', 'G', 'S'
 		],
 	};
 	bless $self, $class;
@@ -198,8 +380,9 @@ sub new {
 	my $class = shift;
 
 	my $self = {
-		'alphabet' => [ 
-			'f', 'n', 'p', 'j', 'i', 'a', 'o', 'y', 'e', 'd', 'r', 'z', 'x', 'w', 'g', 'c', 't', 'k', 'u', 'q', 's', 'b', 'n', 'm', 'h', 'l'
+		'_label'	=> 'ReflectorC',
+		'_alphabet'		=> [ 
+			'F', 'N', 'P', 'J', 'I', 'A', 'O', 'Y', 'E', 'D', 'R', 'Z', 'X', 'W', 'G', 'C', 'T', 'K', 'U', 'Q', 'S', 'B', 'N', 'M', 'H', 'L'
 		],
 	};
 	bless $self, $class;
@@ -216,8 +399,9 @@ sub new {
 	my $class = shift;
 
 	my $self = {
-		'alphabet' => [ 
-			'r', 'd', 'o', 'b', 'j', 'n', 't', 'k', 'v', 'e', 'h', 'm', 'l', 'f', 'c', 'w', 'z', 'a', 'x', 'g', 'y', 'i', 'p', 's', 'u', 'q'
+		'_label'	=> 'ReflectorCdunn',
+		'_alphabet'		=> [ 
+			'R', 'D', 'O', 'B', 'J', 'N', 'T', 'K', 'V', 'E', 'H', 'M', 'L', 'F', 'C', 'W', 'Z', 'A', 'X', 'G', 'Y', 'I', 'P', 'S', 'U', 'Q'
 		],
 	};
 	bless $self, $class;
@@ -234,25 +418,39 @@ sub _init {
 	my $self = shift;
 	my $startLetter = shift;
 
-	my $intStartLetter = ord($startLetter) - 97;
+	my $intStartLetter = ord($startLetter) - 65;
 
 	for( my $count = 0; $count < $intStartLetter; $count++ ) {
 		# rotate the letters
-		my $letter = pop @{$self->{alphabet}};
-		unshift @{$self->{alphabet}}, $letter;
-		$self->{cycleLetterPosition} == 0 ? $self->{cycleLetterPosition} = 25 : $self->{cycleLetterPosition}--;
+		my $letter = pop @{$self->{_alphabet}};
+		unshift @{$self->{_alphabet}}, $letter;
+		$self->{_cycleLetterPosition} == 0 ? $self->{_cycleLetterPosition} = 25 : $self->{_cycleLetterPosition}--;
 	};
 
 	return( 0 );
 };
 
+sub getName {
+	my $self = shift;
+	return( $self->{_label} );
+};
+
+sub getStartLetter {
+	my $self = shift;
+	return( $self->{_startLetter} );
+};
+
+sub getRingSetting {
+	my $self = shift;
+	return( $self->{_ringSetting} );
+};
 
 sub fwdCipher {
 	my $self = shift;
 	my $inputLetter = shift;
 
-	my $intInputLetter = ( ord($inputLetter) - 97 + $self->{ringSetting} ) % 26;
-	my $outputLetter = ${$self->{alphabet}}[$intInputLetter];
+	my $intInputLetter = ( ord($inputLetter) - 65 + $self->{_ringSetting} ) % 26;
+	my $outputLetter = ${$self->{_alphabet}}[$intInputLetter];
 
 	return( $outputLetter );
 };
@@ -264,10 +462,10 @@ sub revCipher {
 	my $outputLetter;
 
 	my $count = 0;
-	foreach ( @{$self->{alphabet}} ) {
+	foreach ( @{$self->{_alphabet}} ) {
 		if( $inputLetter eq $_ ) {
-				$outputLetter = chr((($count - $self->{ringSetting} + 26) % 26) + 97);
-			};
+				$outputLetter = chr((($count - $self->{_ringSetting} + 26) % 26) + 65);
+		};
 		$count++;
 	};
 	return( $outputLetter );
@@ -278,15 +476,15 @@ sub revCipher {
 sub _rotateDisk {
 	my $self = shift;
 
-	my $letter = pop @{$self->{alphabet}};
-	unshift @{$self->{alphabet}}, $letter;
+	my $letter = pop @{$self->{_alphabet}};
+	unshift @{$self->{_alphabet}}, $letter;
 
-	if( $self->{cycleLetterPosition} == 0 ) {
+	if( $self->{_cycleLetterPosition} == 0 ) {
 		$self->_setFlag( rotateNext => 1 );
-		$self->{cycleLetterPosition} = 25;
+		$self->{_cycleLetterPosition} = 25;
 	}
 	else {
-		$self->{cycleLetterPosition}--;
+		$self->{_cycleLetterPosition}--;
 	};
 
 	return( 0 );
@@ -325,10 +523,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (16 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-			'b', 'd', 'f', 'h', 'j', 'l', 'c', 'p', 'r', 't', 'x', 'v', 'z', 'n', 'y', 'e', 'i', 'w', 'g', 'a', 'k', 'm', 'u', 's', 'q', 'o'
+		'_label'	=> 'RotorI',
+		'_cycleLetterPosition' => (16 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'B', 'D', 'F', 'H', 'J', 'L', 'C', 'P', 'R', 'T', 'X', 'V', 'Z', 'N', 'Y', 'E', 'I', 'W', 'G', 'A', 'K', 'M', 'U', 'S', 'Q', 'O'
 			]
 	};
 	bless $self, $class;
@@ -349,10 +549,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (5 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-			'a', 'j', 'd', 'k', 's', 'i', 'r', 'u', 'x', 'b', 'l', 'h', 'w', 't', 'm', 'c', 'q', 'g', 'z', 'n', 'p', 'y', 'f', 'v', 'o', 'e'
+		'_label'	=> 'RotorII',
+		'_cycleLetterPosition' => (5 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'A', 'J', 'D', 'K', 'S', 'I', 'R', 'U', 'X', 'B', 'L', 'H', 'W', 'T', 'M', 'C', 'Q', 'G', 'Z', 'N', 'P', 'Y', 'F', 'V', 'O', 'E'
 			]
 	};
 	bless $self, $class;
@@ -373,10 +575,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (22 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-			'e', 'k', 'm', 'f', 'l', 'g', 'd', 'q', 'v', 'z', 'n', 't', 'o', 'w', 'y', 'h', 'x', 'u', 's', 'p', 'a', 'i', 'b', 'r', 'c', 'j'
+		'_label'	=> 'RotorIII',
+		'_cycleLetterPosition' => (22 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'E', 'K', 'M', 'F', 'L', 'G', 'D', 'Q', 'V', 'Z', 'N', 'T', 'O', 'W', 'Y', 'H', 'X', 'U', 'S', 'P', 'A', 'I', 'B', 'R', 'C', 'J'
 			]
 	};
 	bless $self, $class;
@@ -398,35 +602,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (10 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'e', 's', 'o', 'v', 'p', 'z', 'j', 'a', 'y', 'q', 'u', 'i', 'r', 'h', 'x', 'l', 'n', 'f', 't', 'g', 'k', 'd', 'c', 'm', 'w', 'b'
-			]
-	};
-	bless $self, $class;
-
-	$self->_init( $startLetter );
-
-	return( $self );
-};
-
-
-package Crypt::Enigma::Rotors::RotorVI;
-
-@Crypt::Enigma::Rotors::RotorVI::ISA = qw(Crypt::Enigma::Rotors);
-
-
-sub new {
-	my $class = shift;
-	my $startLetter = shift;
-	my $ringSetting = shift;
-
-	my $self = {
-		'cycleLetterPosition' => (13 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'j', 'p', 'g', 'v', 'o', 'u', 'm', 'f', 'y', 'q', 'b', 'e', 'n', 'h', 'z', 'r', 'd', 'k', 'a', 's', 'x', 'l', 'i', 'c', 't', 'w'
+		'_label'	=> 'RotorIV',
+		'_cycleLetterPosition' => (10 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'E', 'S', 'O', 'V', 'P', 'Z', 'J', 'A', 'Y', 'Q', 'U', 'I', 'R', 'H', 'X', 'L', 'N', 'F', 'T', 'G', 'K', 'D', 'C', 'M', 'W', 'B'
 			]
 	};
 	bless $self, $class;
@@ -448,10 +629,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (0 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'v', 'z', 'b', 'r', 'g', 'i', 't', 'y', 'u', 'p', 's', 'd', 'n', 'h', 'l', 'x', 'a', 'w', 'm', 'j', 'q', 'o', 'f', 'e', 'c', 'k'
+		'_label'	=> 'RotorV',
+		'_cycleLetterPosition' => (0 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'V', 'Z', 'B', 'R', 'G', 'I', 'T', 'Y', 'U', 'P', 'S', 'D', 'N', 'H', 'L', 'X', 'A', 'W', 'M', 'J', 'Q', 'O', 'F', 'E', 'C', 'K'
 			]
 	};
 	bless $self, $class;
@@ -460,6 +643,35 @@ sub new {
 
 	return( $self );
 };
+
+
+
+package Crypt::Enigma::Rotors::RotorVI;
+
+@Crypt::Enigma::Rotors::RotorVI::ISA = qw(Crypt::Enigma::Rotors);
+
+
+sub new {
+	my $class = shift;
+	my $startLetter = shift;
+	my $ringSetting = shift;
+
+	my $self = {
+		'_label'	=> 'RotorVI',
+		'_cycleLetterPosition' => (13 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'J', 'P', 'G', 'V', 'O', 'U', 'M', 'F', 'Y', 'Q', 'B', 'E', 'N', 'H', 'Z', 'R', 'D', 'K', 'A', 'S', 'X', 'L', 'I', 'C', 'T', 'W'
+			]
+	};
+	bless $self, $class;
+
+	$self->_init( $startLetter );
+
+	return( $self );
+};
+
 
 
 package Crypt::Enigma::Rotors::RotorVII;
@@ -473,10 +685,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (13 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'n', 'z', 'j', 'h', 'g', 'r', 'c', 'x', 'm', 'y', 's', 'w', 'b', 'o', 'u', 'f', 'a', 'i', 'v', 'l', 'p', 'e', 'k', 'q', 'd', 't'
+		'_label'	=> 'RotorVII',
+		'_cycleLetterPosition' => (13 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'N', 'Z', 'J', 'H', 'G', 'R', 'C', 'X', 'M', 'Y', 'S', 'W', 'B', 'O', 'U', 'F', 'A', 'I', 'V', 'L', 'P', 'E', 'K', 'Q', 'D', 'T'
 			]
 	};
 	bless $self, $class;
@@ -499,10 +713,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (13 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'f', 'k', 'q', 'h', 't', 'l', 'x', 'o', 'c', 'b', 'j', 's', 'p', 'd', 'z', 'r', 'a', 'm', 'e', 'w', 'n', 'i', 'u', 'y', 'g', 'v'
+		'_label'	=> 'RotorVIII',
+		'_cycleLetterPosition' => (13 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'F', 'K', 'Q', 'H', 'T', 'L', 'X', 'O', 'C', 'B', 'J', 'S', 'P', 'D', 'Z', 'R', 'A', 'M', 'E', 'W', 'N', 'I', 'U', 'Y', 'G', 'V'
 			]
 	};
 	bless $self, $class;
@@ -525,10 +741,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (13 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'l', 'e', 'y', 'j', 'v', 'c', 'n', 'i', 'x', 'w', 'p', 'b', 'q', 'm', 'd', 'r', 't', 'a', 'k', 'z', 'g', 'f', 'u', 'h', 'o', 's'
+		'_label'	=> 'RotorBeta',
+		'_cycleLetterPosition' => (13 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'L', 'E', 'Y', 'J', 'V', 'C', 'N', 'I', 'X', 'W', 'P', 'B', 'Q', 'M', 'D', 'R', 'T', 'A', 'K', 'Z', 'G', 'F', 'U', 'H', 'O', 'S'
 			]
 	};
 	bless $self, $class;
@@ -551,10 +769,12 @@ sub new {
 	my $ringSetting = shift;
 
 	my $self = {
-		'cycleLetterPosition' => (13 + $ringSetting) % 25,
-		'ringSetting' => $ringSetting,
-		'alphabet' => [
-'f', 's', 'o', 'k', 'a', 'n', 'u', 'e', 'r', 'h', 'm', 'b', 't', 'i', 'y', 'c', 'w', 'l', 'q', 'p', 'z', 'x', 'v', 'g', 'j', 'd'
+		'_label'	=> 'RotorGamma',
+		'_cycleLetterPosition' => (13 + $ringSetting) % 25,
+		'_ringSetting' => $ringSetting,
+		'_startLetter' => $startLetter,
+		'_alphabet' => [
+			'F', 'S', 'O', 'K', 'A', 'N', 'U', 'E', 'R', 'H', 'M', 'B', 'T', 'I', 'Y', 'C', 'W', 'L', 'Q', 'P', 'Z', 'X', 'V', 'G', 'J', 'D'
 			]
 	};
 	bless $self, $class;
@@ -568,18 +788,47 @@ sub new {
 
 1;
 
-=head1 NAME
+
+=pod
+
+=head1 TITLE
 
 Crypt::Enigma - Perl implementation of the Enigma cipher
+
+
+=head1 DESCRIPTION
+
+A complete working Perl implementation of the Enigma Machine used during World War II. The cipher calculations are based on actual Enigma values and ciphered values are as would be expected from an Enigma implementation.
+
+The implementation allows for all of the Rotors and Reflectors available to the real world Enigma to be used. A Stecker board has also been implemented, allowing letter substitutions to be made.
+
+The list of available rotors is as follows:
+
+RotorI, RotorII, RotorIII, RotorIV, RotorV, RotorVI, RotorVII, RotorVIII, RotorBeta, RotorGamma.
+
+The list of available reflectors is as follows:
+
+ReflectorB, ReflectorBdunn, ReflectorC, ReflectorCdunn.
+
+A maximum of 5 rotors and 1 reflector can be defined for each encryption/decryption.
 
 
 =head1 SYNOPSIS
 
   use Crypt::Enigma;
 
-  $enigma = Crypt::Enigma->new(
-		'RotorIII', 'RotorII', 'RotorI', 'aaz', '0 0 0' 'ReflectorB' );
+  my $args = {
+	rotors       => [ 'RotorI', 'RotorII', 'RotorIII' ],
+    startletters => [ 'A', 'B', 'C' ],
+    ringsettings => [ '0', '5', '10' ],
+    reflector    => 'ReflectorB',
+  };
 
+  $enigma = Crypt::Enigma->new( $args );
+
+  $enigma->setRotor( 'RotorVI', 'Z', '3', 1 );
+
+  $enigma->setSteckerBoard( [ 'G', 'C' ] );
 
   # Encode the plaintext
   $cipher_text = $enigma->cipher( $plain_text );
@@ -587,19 +836,86 @@ Crypt::Enigma - Perl implementation of the Enigma cipher
   # Decode the ciphertext 
   $plain_text = $enigma->cipher( $cipher_text );
 
+  # Change ring settings
 
-=head1 DESCRIPTION
 
-See the documentation that came with the Crypt::Enigma package for
-more information.
+=head1 CLASS INTERFACE
 
-=head2 EXPORT
+=head2 CONSTRUCTORS
 
-None by default.
+A C<Crypt::Enigma> object is created by calling the new constructor either with, or without arguments. If the constructor is called without arguments the defaults values will be used (unless these are set using the setRotor method detailed below).
 
+=over 4
+
+=item new ( ARGS )
+
+The arguments which can be used to create a C<Crypt::Enigma> instance are as follows:
+
+  -rotors
+  -startletters
+  -ringsettings
+  -stecker
+  -reflector
+
+The first four are to be passed in as references to arrays, while the last arguement is simply a scalar.
+
+=back
+
+=head2 OBJECT METHODS
+
+=over 4
+
+=item cipher ( ARGS )
+
+This method crypts and decrypts the supplied argument containing a string of text.
+
+=item setRotor ( ARGS )
+
+The setRotor method is called to set a rotor of the Enigma to a specific setting. The arguments to be passed in are as follows:
+
+  -rotor name (RotorI, RotorII, etc)
+  -initial start letter ('A', 'B', etc)
+  -ring setting ('0', '1', etc)
+  -rotor number ('1', '2', etc)
+
+=item setSteckerBoard ( ARGS )
+
+The Stecker board is set by calling the C<setSteckerBoard> method and supplying a reference to an array as the first argument.
+
+The array should contain a set of letter pairs, such as:
+
+  [ 'A', 'B', 'C', 'D' ];
+
+In this example, 'A' will be "Steckered" with 'B' (and vice-versa) and 'C' will be "Steckered" with 'D' (and vice-versa).
+
+=item dumpSettings
+
+This method will print out (to STDERR) the current rotor settings.
+
+=item getRotorNames 
+
+Returns an array of the rotor names.
+
+=item getStartLetters 
+
+Returns an array of the start letters.
+
+=item getRingSettings 
+
+Returns an array of the ring settings.
+
+=item getReflector 
+
+Returns a string containing the name of the reflector used.
+
+=back
+
+=head1 KNOWN BUGS
+
+None, but that does not mean there are not any.
 
 =head1 AUTHOR
 
-Alistair Mills, <lt>cpan@alizta.com<gt>
+Alistair Francis, <cpan@alizta.com>
 
 =cut
