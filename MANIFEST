@@ -2,6 +2,7 @@ Enigma.pm
 Makefile.PL
 MANIFEST
 README
+Changes
 t/01.t
 examples/enigma1.pl
 examples/enigma2.pl

@@ -1,6 +1,6 @@
 package Crypt::Enigma;
 
-$VERSION = '1.0';
+$VERSION = '1.2';
 
 use strict;
 
@@ -877,6 +877,8 @@ The setRotor method is called to set a rotor of the Enigma to a specific setting
   -initial start letter ('A', 'B', etc)
   -ring setting ('0', '1', etc)
   -rotor number ('1', '2', etc)
+
+If incorrect values are passed in, the default settings are used.
 
 =item setSteckerBoard ( ARGS )
 
