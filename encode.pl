@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/local/bin/perl -w
 use Crypt::Enigma;
 
 if (! $ARGV[0]) {
@@ -11,7 +11,7 @@ $rings = $ARGV[1];
 $initial_settings = $ARGV[2];
 @input = split (//, $ARGV[3]);
 
-$enigma = Enigma->new ();
+$enigma = Crypt::Enigma->new ();
 
 $enigma->setup ($rotors, $rings, $initial_settings);
 $enigma->stekker ("a", "b");

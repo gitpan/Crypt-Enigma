@@ -4,3 +4,8 @@ Revision history for Perl extension Crypt::Enigma.
 	- original version; created by h2xs 1.21 with options
 		-XA -n Crypt::Enigma
 
+
+1.1 Mon Nov 26 3:00:00 2001
+
+	- fixed a problem with the example scripts (forgot 
+	the Crypt:: on front of Enigma.

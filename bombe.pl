@@ -47,7 +47,7 @@ foreach $combo (@combos) {
 	my ($link);
 	foreach $link (@loops) {
 
-		$enigmas{$link} = Enigma->new();
+		$enigmas{$link} = Crypt::Enigma->new();
 		$enigmas{$link}->setup($combo, $isetting, $isetting);
 
 		# Advance this enigma the proper number of turns...
