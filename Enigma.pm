@@ -1,6 +1,6 @@
 package Crypt::Enigma;
 
-$VERSION = '1.2';
+$VERSION = '1.3';
 
 use strict;
 
@@ -13,7 +13,8 @@ sub new {
 		_rotorObjects		=> undef,
 		_reflectorObject	=> undef,
 		_stecker			=> undef,
-		_settings			=>[]
+		_settings			=> [],
+		_debug				=> 0,
 	};
 	bless $self, $class;
 
@@ -28,7 +29,7 @@ sub _init {
 
 	foreach( keys %{$args} ) {
 		if( ($_ =~ /^(rotors|startletters|ringsettings|stecker)$/) && (ref($args->{$_}) ne 'ARRAY') ) {
-			print STDERR "Argument '$_' should be an array reference (using defaults)\n";
+			$self->_printDebug( "Argument '$_' should be an array reference (using defaults)" );
 			delete( ${$args}{$_} );
 		};
 	};
@@ -39,16 +40,22 @@ sub _init {
 	my $reflector		= $args->{reflector} || 'ReflectorB';
 	my $stecker			= $args->{stecker} || [];
 
-	my $count = 0;
-	foreach ( @{$rotors} ) {
-		push @{$self->{_settings}}, [ $_, $startletters->[$count], $rings->[$count] ];
+	if( @{$rotors} < 3 ) {
+		$self->_printDebug( 'A minimum of 3 rotors must be defined (using defaults)' );
+		my @misc_rotors = ( 'RotorV', 'RotorVI', 'RotorVII' );
+		while( @{$rotors} < 3 ) {
+			push @{$rotors}, shift @misc_rotors;
+		};
+	};
 
+	my $count = 0;
+	foreach( @{$rotors} ) {
+		push @{$self->{_settings}}, [ $_, $startletters->[$count], $rings->[$count] ];
 		$count++;
 	};
 
 	# Create Reflector
-	my $reflectorObj = Crypt::Enigma::Reflectors->new( $reflector );
-	$self->_storeReflectorObject( $reflectorObj );
+	$self->setReflector( $reflector );
 
 	# Setup Steckerboard
 	$self->setSteckerBoard( $stecker );
@@ -96,9 +103,16 @@ sub setSteckerBoard {
 	my $self = shift;
 	my $stecker = shift;
 
+	unless( (@{$stecker} % 2) == 0 ) {
+		$self->_printDebug( 'Odd number of letters in setSteckerBoard (disabling Steckerboard)' );
+		return;
+	};
+
 	for(my $count = 0; $count < @{$stecker}; $count = $count+2 ) {
-		$self->{_stecker}->{$stecker->[$count]} = $stecker->[$count+1];
-		$self->{_stecker}->{$stecker->[$count+1]} = $stecker->[$count];
+		my $letter1 = uc( $stecker->[$count] );
+		my $letter2 = uc( $stecker->[$count+1] );
+		$self->{_stecker}->{$letter1} = $letter2;
+		$self->{_stecker}->{$letter2} = $letter1;
 	};
 
 	return;
@@ -123,23 +137,23 @@ sub setRotor {
 	my $rotorNumber = shift;
 
 	# Do some checking
-	unless( $rotorName =~ /^Rotor(I|II|III|IV|V|VI|VII|VIII|Beta|Gamma)$/ ) {
-		print STDERR "Invalid rotor name (using default 'RotorI')\n";
+	unless( defined($rotorName) && ($rotorName =~ /^Rotor(I|II|III|IV|V|VI|VII|VIII|Beta|Gamma)$/) ) {
+		$self->_printDebug( 'Invalid rotor name (using default \'RotorI\')' );
 		$rotorName = 'RotorI';
 	};
 
 	unless( defined($startLetter) && $startLetter =~ /^[A-Z]$/ ) {
-		print STDERR "Invalid start letter (using default 'A' for $rotorName)\n";
+		$self->_printDebug( "Invalid start letter (using default 'A' for $rotorName)" );
 		$startLetter = 'A';
 	};
 
 	unless( defined($ringSetting) && ($ringSetting =~ /[0-9]$/) && ($ringSetting >= 0) && ($ringSetting <= 25) ) {
-		print STDERR "Invalid ring setting (using default '0' for $rotorName)\n";
+		$self->_printDebug( "Invalid ring setting (using default '0' for $rotorName)" );
 		$ringSetting = 0;
 	}
 
 	unless( defined($rotorNumber) && ($rotorNumber > 0) && ($rotorNumber < 6) ) {
-		print STDERR "Invalid rotor number (failed to add rotor $rotorName)\n";
+		$self->_printDebug( "Invalid rotor number (failed to add rotor $rotorName)" );
 		return( 0 );
 	};
 
@@ -151,11 +165,29 @@ sub setRotor {
 };
 
 
+sub setReflector {
+	my $self = shift;
+	my $reflector = shift;
+
+	unless( $reflector =~ /^Reflector(B|Bdunn|C|Cdunn)$/ ) {
+		$self->_printDebug( 'Invalid reflector name (using default \'ReflectorB\')' );
+		$reflector = 'ReflectorB';
+	};
+
+	my $reflectorClass = 'Crypt::Enigma::Reflectors::' . $reflector;
+	my $reflectorObj = $reflectorClass->new;
+	$self->_storeReflectorObject( $reflectorObj );
+
+	return( 1 );
+};
+
+
 sub cipher {
 	my $self = shift;
 	my $plainText = uc(shift);
 	my $cipherText = '';
 
+	# setup the rotors
 	my $count = 1;
 	foreach( @{$self->{_settings}} ) {
 		# setRotor(rotorName, startLetter, ringSetting, rotorNumber)
@@ -295,26 +327,29 @@ sub _cycleNextRotor {
 	return;
 };
 
+sub _printDebug {
+	my $self = shift;
+	my $msg = shift;
 
+	if( $self->{_debug} ) {
+		print $msg, "\n";
+	};
+
+	return;
+};
+
+sub setDebug {
+	my $self = shift;
+	my $debug = shift || 0;
+
+	$self->{_debug} = $debug;
+
+	return;
+};
 
 package Crypt::Enigma::Reflectors;
 
 use strict;
-
-sub new {
-	my $class = shift;
-	my $reflector = shift;
-
-	unless( $reflector =~ /^Reflector(B|Bdunn|C|Cdunn)$/ ) {
-		print STDERR "Invalid reflector name (using default 'ReflectorB')\n";
-		$reflector = 'ReflectorB';
-	};
-
-	my $reflectorClass = 'Crypt::Enigma::Reflectors::' . $reflector;
-	my $reflectorObj = $reflectorClass->new;
-
-	return( $reflectorObj );
-};
 
 sub _reflect {
 	my $self = shift;
@@ -798,9 +833,9 @@ Crypt::Enigma - Perl implementation of the Enigma cipher
 
 =head1 DESCRIPTION
 
-A complete working Perl implementation of the Enigma Machine used during World War II. The cipher calculations are based on actual Enigma values and ciphered values are as would be expected from an Enigma implementation.
+This module is a complete working Perl implementation of the Enigma Machine used during World War II. The cipher calculations are based on actual Enigma values and the resulting ciphered values are as would be expected from an Enigma Machine.
 
-The implementation allows for all of the Rotors and Reflectors available to the real world Enigma to be used. A Stecker board has also been implemented, allowing letter substitutions to be made.
+The implementation allows for all of the Rotors and Reflectors available to the real world Enigma to be used. A Steckerboard has also been implemented, allowing letter substitutions to be made.
 
 The list of available rotors is as follows:
 
@@ -810,7 +845,7 @@ The list of available reflectors is as follows:
 
 ReflectorB, ReflectorBdunn, ReflectorC, ReflectorCdunn.
 
-A maximum of 5 rotors and 1 reflector can be defined for each encryption/decryption.
+As with the real world Enigma, a minimum of 3 and a maximum of 5 rotors along with 1 reflector may be defined for each encryption/decryption.
 
 
 =head1 SYNOPSIS
@@ -818,7 +853,7 @@ A maximum of 5 rotors and 1 reflector can be defined for each encryption/decrypt
   use Crypt::Enigma;
 
   my $args = {
-	rotors       => [ 'RotorI', 'RotorII', 'RotorIII' ],
+    rotors       => [ 'RotorI', 'RotorII', 'RotorIII' ],
     startletters => [ 'A', 'B', 'C' ],
     ringsettings => [ '0', '5', '10' ],
     reflector    => 'ReflectorB',
@@ -826,8 +861,10 @@ A maximum of 5 rotors and 1 reflector can be defined for each encryption/decrypt
 
   $enigma = Crypt::Enigma->new( $args );
 
+  # Change rotor settings
   $enigma->setRotor( 'RotorVI', 'Z', '3', 1 );
 
+  # Set the letter substitutions
   $enigma->setSteckerBoard( [ 'G', 'C' ] );
 
   # Encode the plaintext
@@ -836,14 +873,12 @@ A maximum of 5 rotors and 1 reflector can be defined for each encryption/decrypt
   # Decode the ciphertext 
   $plain_text = $enigma->cipher( $cipher_text );
 
-  # Change ring settings
-
 
 =head1 CLASS INTERFACE
 
 =head2 CONSTRUCTORS
 
-A C<Crypt::Enigma> object is created by calling the new constructor either with, or without arguments. If the constructor is called without arguments the defaults values will be used (unless these are set using the setRotor method detailed below).
+A C<Crypt::Enigma> object is created by calling the new constructor either with, or without arguments. If the constructor is called without arguments the defaults values will be used (unless these are set using the C<setRotor> method detailed below).
 
 =over 4
 
@@ -857,7 +892,7 @@ The arguments which can be used to create a C<Crypt::Enigma> instance are as fol
   -stecker
   -reflector
 
-The first four are to be passed in as references to arrays, while the last arguement is simply a scalar.
+The first four are to be passed in as references to arrays, while the last argument is a scalar.
 
 =back
 
@@ -867,48 +902,56 @@ The first four are to be passed in as references to arrays, while the last argue
 
 =item cipher ( ARGS )
 
-This method crypts and decrypts the supplied argument containing a string of text.
+This method crypts and decrypts the supplied argument containing a string of text. Any characters which are not from the English alphabet (punctuation, numerics, etc) are ignored.
 
 =item setRotor ( ARGS )
 
-The setRotor method is called to set a rotor of the Enigma to a specific setting. The arguments to be passed in are as follows:
+The C<setRotor> method is called to set a rotor of the Enigma to specific settings. The arguments to be passed in are as follows:
 
-  -rotor name (RotorI, RotorII, etc)
-  -initial start letter ('A', 'B', etc)
-  -ring setting ('0', '1', etc)
-  -rotor number ('1', '2', etc)
+  -rotor name (eg. RotorI, RotorII, etc)
+  -initial start letter (eg. 'A', 'B', etc)
+  -ring setting (eg. '0', '1', etc)
+  -rotor number (eg. '1', '2', etc)
 
 If incorrect values are passed in, the default settings are used.
 
+=item setReflector ( ARG )
+
+The C<setReflector> method is called to set the reflector of the Enigma Machine. The argument to be passed in is a string containing the name of any of the available reflectors.
+
 =item setSteckerBoard ( ARGS )
 
-The Stecker board is set by calling the C<setSteckerBoard> method and supplying a reference to an array as the first argument.
+The Steckerboard is set by calling the C<setSteckerBoard> method and supplying a reference to an array as the first argument.
 
 The array should contain a set of letter pairs, such as:
 
   [ 'A', 'B', 'C', 'D' ];
 
-In this example, 'A' will be "Steckered" with 'B' (and vice-versa) and 'C' will be "Steckered" with 'D' (and vice-versa).
+In this example, each instance of the letter 'A' will be replaced with the letter 'B' (and vice-versa) and each instance of the letter 'C' will be replaced with the letter 'D' (and vice-versa).
+
+=item getRotorNames 
+
+Returns an array containing the rotor names currently defined for encryption/decryption.
+
+=item getStartLetters 
+
+Returns an array containing the start letters currently defined for encryption/decryption.
+
+=item getRingSettings 
+
+Returns an array containing the ring settings currently defined for encryption/decryption.
+
+=item getReflector 
+
+Returns a string containing the name of the reflector currently defined for encryption/decryption.
 
 =item dumpSettings
 
 This method will print out (to STDERR) the current rotor settings.
 
-=item getRotorNames 
+=item setDebug ( ARG )
 
-Returns an array of the rotor names.
-
-=item getStartLetters 
-
-Returns an array of the start letters.
-
-=item getRingSettings 
-
-Returns an array of the ring settings.
-
-=item getReflector 
-
-Returns a string containing the name of the reflector used.
+The C<setDebug> method is used to set the debug value of the C<Crypt::Enigma> object. The value of the argument can be either 1 (debug on) or 0 (debug off). The debug value is set to 0 by default.
 
 =back
 

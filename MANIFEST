@@ -1,9 +1,10 @@
-Enigma.pm
-Makefile.PL
-MANIFEST
-README
 Changes
-t/01.t
+Enigma.pm
+MANIFEST
+Makefile.PL
+README
 examples/enigma1.pl
 examples/enigma2.pl
 examples/enigma3.pl
+examples/enigma4.pl
+t/01.t

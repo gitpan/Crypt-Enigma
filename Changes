@@ -1,5 +1,10 @@
 Revision history for Perl extension Crypt::Vigenere.
 
+1.3     2002.04.23
+	- updates to documentation
+	- more rigid implementation of real world enigma
+	- added setDebug method for debugging errors
+
 1.2     2002.04.17
     - minor bugfixes
 

@@ -11,10 +11,11 @@ my $text = $ARGV[0];
 
 my $enigma = Crypt::Enigma->new;
 
-print "Plain text:\t$text\n";
+$enigma->setDebug( 1 );
 
 $enigma->setRotor( 'RotorVII', 'A', '0', 2 );
 
+print "Plain text:\t$text\n";
 print "Cipher Text:\t", $enigma->cipher( $text ), " \n";
 
 $enigma->dumpSettings;
