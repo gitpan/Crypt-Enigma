@@ -8,3 +8,4 @@ examples/enigma2.pl
 examples/enigma3.pl
 examples/enigma4.pl
 t/01.t
+META.yml                                 Module meta-data (added by MakeMaker)

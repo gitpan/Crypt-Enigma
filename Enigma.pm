@@ -1,6 +1,6 @@
 package Crypt::Enigma;
 
-$VERSION = '1.3';
+$VERSION = '1.4';
 
 use strict;
 
@@ -563,7 +563,7 @@ sub new {
 		'_ringSetting' => $ringSetting,
 		'_startLetter' => $startLetter,
 		'_alphabet' => [
-			'B', 'D', 'F', 'H', 'J', 'L', 'C', 'P', 'R', 'T', 'X', 'V', 'Z', 'N', 'Y', 'E', 'I', 'W', 'G', 'A', 'K', 'M', 'U', 'S', 'Q', 'O'
+			'E', 'K', 'M', 'F', 'L', 'G', 'D', 'Q', 'V', 'Z', 'N', 'T', 'O', 'W', 'Y', 'H', 'X', 'U', 'S', 'P', 'A', 'I', 'B', 'R', 'C', 'J'
 			]
 	};
 	bless $self, $class;
@@ -615,7 +615,7 @@ sub new {
 		'_ringSetting' => $ringSetting,
 		'_startLetter' => $startLetter,
 		'_alphabet' => [
-			'E', 'K', 'M', 'F', 'L', 'G', 'D', 'Q', 'V', 'Z', 'N', 'T', 'O', 'W', 'Y', 'H', 'X', 'U', 'S', 'P', 'A', 'I', 'B', 'R', 'C', 'J'
+			'B', 'D', 'F', 'H', 'J', 'L', 'C', 'P', 'R', 'T', 'X', 'V', 'Z', 'N', 'Y', 'E', 'I', 'W', 'G', 'A', 'K', 'M', 'U', 'S', 'Q', 'O'
 			]
 	};
 	bless $self, $class;
