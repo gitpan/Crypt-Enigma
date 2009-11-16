@@ -1,6 +1,6 @@
 package Crypt::Enigma;
 
-$VERSION = '1.4';
+$VERSION = '1.5';
 
 use strict;
 
@@ -961,6 +961,6 @@ None, but that does not mean there are not any.
 
 =head1 AUTHOR
 
-Alistair Francis, <cpan@alizta.com>
+Alistair Francis, http://search.cpan.org/~friffin/
 
 =cut
